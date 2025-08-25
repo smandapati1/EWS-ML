@@ -1,36 +1,30 @@
 project:
-random_seed: 42
-checkpoints_dir: checkpoints
-reports_dir: reports
-logs_dir: logs
-
+  random_seed: 42
+  checkpoints_dir: checkpoints
+  reports_dir: reports
+  logs_dir: logs
 
 data:
-use_synthetic: true
-raw_dir: data/raw
-processed_dir: data/processed
-external_dir: data/external
-n_patients: 1200
-hours: 48
-
+  use_synthetic: true
+  raw_dir: data/raw
+  processed_dir: data/processed
+  external_dir: data/external
+  n_patients: 1200
+  hours: 48
 
 labeling:
-window_hours: 6
-horizon_hours: 12
-
+  window_hours: 6
+  horizon_hours: 12
 
 features:
-variables: [HR, RR, SBP, SpO2, Temp]
-
+  variables: [HR, RR, SBP, SpO2, Temp]
 
 split:
-train_frac: 0.70
-valid_frac: 0.15 # test = 1 - train - valid
-
+  train_frac: 0.70
+  valid_frac: 0.15
 
 scaling:
-with_mean: false
-
+  with_mean: false
 
 runtime:
-n_jobs: -1
+  n_jobs: -1
