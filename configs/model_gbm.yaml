@@ -1,0 +1,13 @@
+model:
+name: gbm
+params:
+random_state: 42
+n_estimators: 250
+learning_rate: 0.05
+max_depth: 3
+subsample: 1.0
+max_features: "sqrt"
+calibration:
+enabled: true
+method: isotonic
+cv: 3

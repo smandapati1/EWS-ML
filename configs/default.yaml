@@ -1,0 +1,36 @@
+project:
+random_seed: 42
+checkpoints_dir: checkpoints
+reports_dir: reports
+logs_dir: logs
+
+
+data:
+use_synthetic: true
+raw_dir: data/raw
+processed_dir: data/processed
+external_dir: data/external
+n_patients: 1200
+hours: 48
+
+
+labeling:
+window_hours: 6
+horizon_hours: 12
+
+
+features:
+variables: [HR, RR, SBP, SpO2, Temp]
+
+
+split:
+train_frac: 0.70
+valid_frac: 0.15 # test = 1 - train - valid
+
+
+scaling:
+with_mean: false
+
+
+runtime:
+n_jobs: -1
