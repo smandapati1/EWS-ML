@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import json
 from pathlib import Path
 
 st.set_page_config(page_title="EWS Dashboard", layout="wide")
@@ -7,11 +8,13 @@ st.set_page_config(page_title="EWS Dashboard", layout="wide")
 REPORTS = Path("reports")
 PRED_PATH = REPORTS / "pred_test.csv"
 METRICS_PATH = REPORTS / "metrics_test.json"
+FEATIMP_PATH = REPORTS / "feature_importance.json"
 
 st.title("🏥 Early Warning System — Demo Dashboard")
 
+# ---- Active Alerts ----
 if not PRED_PATH.exists():
-    st.warning("No predictions found. Train a model first with: "
+    st.warning("No predictions found. Train a model first with:\n\n"
                "`python main.py train --config configs/default.yaml --model-config configs/model_gbm.yaml`")
 else:
     df = pd.read_csv(PRED_PATH)
@@ -30,8 +33,25 @@ else:
     st.subheader("Active Alerts")
     st.dataframe(alerts.head(200))
 
-    st.subheader("Metrics (test)")
-    if METRICS_PATH.exists():
-        st.json(pd.read_json(METRICS_PATH).to_dict())
-    else:
-        st.info("Run `python main.py evaluate` to compute metrics.")
+# ---- Metrics ----
+st.subheader("Metrics (test)")
+if METRICS_PATH.exists():
+    with open(METRICS_PATH, "r") as f:
+        metrics = json.load(f)
+    st.json(metrics)
+else:
+    st.info("Run `python main.py evaluate` to compute metrics.")
+
+# ---- Feature Importance ----
+st.subheader("Top Contributing Features")
+if FEATIMP_PATH.exists():
+    with open(FEATIMP_PATH, "r") as f:
+        feat_imp = json.load(f)["top_features"]
+
+    feat_df = pd.DataFrame.from_dict(feat_imp, orient="index", columns=["importance"])
+    feat_df = feat_df.sort_values("importance", ascending=False)
+
+    st.bar_chart(feat_df)
+else:
+    st.info("Run `python main.py interpret` to compute feature importances.")
+
