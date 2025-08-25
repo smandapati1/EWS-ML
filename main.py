@@ -1,7 +1,7 @@
 import argparse
 from pathlib import Path
 from src import utils
-from src import preprocessing, train as train_mod, evaluate as evaluate_mod, interpret
+from src import preprocessing, train as train_mod, evaluate as evaluate_mod, int
 
 
 def _merge_configs(default_cfg_path: str, override_cfg_path: str | None):
@@ -57,4 +57,4 @@ if __name__ == "__main__":
 
     elif args.cmd == "interpret":
         cfg = _merge_configs(args.config, None)
-        interpret.run(cfg, model_path=args.model_path)
+        int.run(cfg, model_path=args.model_path)
