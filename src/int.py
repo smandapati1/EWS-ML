@@ -6,7 +6,7 @@ import pandas as pd
 from .utils import get_logger, load_pickle, save_json
 from .windowing import build_feature_table
 
-logger = get_logger("interpret")
+logger = get_logger("int")
 
 
 def _fallback_importance(model, feature_names: list[str], topk: int = 10):
@@ -22,17 +22,20 @@ def run(cfg: dict, model_path: str = "checkpoints/model.pkl"):
     model = art["model"]
     scaler = art["scaler"]
     cols = art["cols"]
+    medians = art.get("medians", {})
 
     df = pd.read_parquet(Path(cfg["data"]["processed_dir"]) / "timeseries.parquet")
     variables = cfg["features"]["variables"]
     W = cfg["labeling"]["window_hours"]
     H = cfg["labeling"]["horizon_hours"]
-    X, y = build_feature_table(df, variables, W, H)
+    X, _ = build_feature_table(df, variables, W, H)
 
-    Xs = scaler.transform(X[cols].iloc[:1000])
+    # Use a small sample for speed; impute with training medians
+    Xs_df = X[cols].iloc[:1000].copy().fillna(medians)
+    Xs = scaler.transform(Xs_df)
 
     try:
-        import shap
+        import shap  # optional
         explainer = shap.Explainer(model, Xs)
         sv = explainer(Xs)
         mean_abs = np.abs(sv.values).mean(axis=0)
@@ -40,7 +43,9 @@ def run(cfg: dict, model_path: str = "checkpoints/model.pkl"):
         top = {cols[i]: float(mean_abs[i]) for i in order}
     except Exception as e:
         logger.info(f"SHAP unavailable or failed ({e}); using fallback importances.")
-        top = _fallback_importance(getattr(model, "base_estimator", model), cols, topk=15)
+        # If model is CalibratedClassifierCV, underlying estimator may be in .base_estimator
+        core = getattr(model, "base_estimator", model)
+        top = _fallback_importance(core, cols, topk=15)
 
     Path(cfg["project"]["reports_dir"]).mkdir(parents=True, exist_ok=True)
     save_json({"top_features": top}, Path(cfg["project"]["reports_dir"]) / "feature_importance.json")

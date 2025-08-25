@@ -23,8 +23,7 @@ def _split_by_patient(X: pd.DataFrame, y: np.ndarray, train_frac: float, valid_f
 
     idx_train = np.isin(pids, list(train_p))
     idx_valid = np.isin(pids, list(valid_p))
-    idx_test = np.isin(pids, list(test_p))
-
+    idx_test  = np.isin(pids, list(test_p))
     return idx_train, idx_valid, idx_test
 
 
@@ -37,16 +36,28 @@ def run(cfg: dict):
     H = cfg["labeling"]["horizon_hours"]
     X, y = build_feature_table(df, variables, W, H)
 
-    idx_tr, idx_va, idx_te = _split_by_patient(X, y, cfg["split"]["train_frac"], cfg["split"]["valid_frac"])
+    idx_tr, idx_va, idx_te = _split_by_patient(
+        X, y, cfg["split"]["train_frac"], cfg["split"]["valid_frac"]
+    )
 
-    scaler = StandardScaler(with_mean=cfg["scaling"]["with_mean"])
+    # Feature columns (exclude IDs/timestamps)
     cols = [c for c in X.columns if c not in ["patient_id", "hour"]]
 
-    X_tr = scaler.fit_transform(X.loc[idx_tr, cols])
-    X_va = scaler.transform(X.loc[idx_va, cols])
-    X_te = scaler.transform(X.loc[idx_te, cols])
+    # ---- Median imputation learned ONLY on train (prevents leakage) ----
+    train_medians = X.loc[idx_tr, cols].median(numeric_only=True)
+
+    X_tr_df = X.loc[idx_tr, cols].fillna(train_medians)
+    X_va_df = X.loc[idx_va, cols].fillna(train_medians)
+    X_te_df = X.loc[idx_te, cols].fillna(train_medians)
     y_tr, y_va, y_te = y[idx_tr], y[idx_va], y[idx_te]
 
+    # ---- Scaling (fit on train only) ----
+    scaler = StandardScaler(with_mean=cfg["scaling"]["with_mean"])
+    X_tr = scaler.fit_transform(X_tr_df)
+    X_va = scaler.transform(X_va_df)
+    X_te = scaler.transform(X_te_df)
+
+    # ---- Model ----
     model = build_model(cfg["model"]["name"], cfg["model"].get("params", {}), cfg.get("calibration", {}))
     model.fit(X_tr, y_tr)
 
@@ -58,15 +69,21 @@ def run(cfg: dict):
         return p
 
     p_va = _metrics("VALID", X_va, y_va)
-    p_te = _metrics("TEST", X_te, y_te)
+    p_te = _metrics("TEST",  X_te, y_te)
 
+    # ---- Save artifacts ----
     ckpt_dir = Path(cfg["project"]["checkpoints_dir"])
     reports_dir = Path(cfg["project"]["reports_dir"])
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     reports_dir.mkdir(parents=True, exist_ok=True)
 
-    save_pickle({"model": model, "scaler": scaler, "cols": cols}, ckpt_dir / "model.pkl")
+    # Save model, scaler, feature list, and training medians for future imputation
+    save_pickle(
+        {"model": model, "scaler": scaler, "cols": cols, "medians": train_medians.to_dict()},
+        ckpt_dir / "model.pkl",
+    )
 
+    # Save predictions for dashboard
     pred_te = X.loc[idx_te, ["patient_id", "hour"]].copy()
     pred_te["y"] = y_te
     pred_te["p"] = p_te

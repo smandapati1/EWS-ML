@@ -20,6 +20,7 @@ def run(cfg: dict, model_path: str = "checkpoints/model.pkl"):
     model = art["model"]
     scaler = art["scaler"]
     cols = art["cols"]
+    medians = art.get("medians", {})  # dict of feature: median
 
     df = pd.read_parquet(Path(cfg["data"]["processed_dir"]) / "timeseries.parquet")
     variables = cfg["features"]["variables"]
@@ -27,7 +28,7 @@ def run(cfg: dict, model_path: str = "checkpoints/model.pkl"):
     H = cfg["labeling"]["horizon_hours"]
     X, y = build_feature_table(df, variables, W, H)
 
-    # hold-out test split (same method as in train)
+    # pick test split same as in train
     pids = X["patient_id"].values
     unique = np.unique(pids)
     n_train = int(cfg["split"]["train_frac"] * len(unique))
@@ -35,14 +36,15 @@ def run(cfg: dict, model_path: str = "checkpoints/model.pkl"):
     test_p = set(unique[n_train + n_valid :])
     idx_te = np.isin(pids, list(test_p))
 
-    X_te = scaler.transform(X.loc[idx_te, cols])
+    # Impute with training medians, then scale
+    X_te_df = X.loc[idx_te, cols].copy().fillna(medians)
+    X_te = scaler.transform(X_te_df)
     y_te = y[idx_te]
 
     p = model.predict_proba(X_te)[:, 1]
     auroc = roc_auc_score(y_te, p)
     auprc = average_precision_score(y_te, p)
     brier = brier_score_loss(y_te, p)
-
     frac_pos, mean_pred = calibration_curve(y_te, p, n_bins=10, strategy="quantile")
 
     logger.info(f"TEST AUROC={auroc:.3f} AUPRC={auprc:.3f} Brier={brier:.3f}")
@@ -56,6 +58,6 @@ def run(cfg: dict, model_path: str = "checkpoints/model.pkl"):
             "mean_predicted_value": mean_pred.tolist(),
         },
     }
-
     Path(cfg["project"]["reports_dir"]).mkdir(parents=True, exist_ok=True)
     save_json(out, Path(cfg["project"]["reports_dir"]) / "metrics_test.json")
+
